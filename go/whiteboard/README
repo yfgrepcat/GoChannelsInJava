@@ -1,0 +1,33 @@
+Depuis le répertoire "bin" ou en positionnant le CLASSPATH :
+
+1) lancer le go.cs.server :
+   java go.cs.ServerImpl
+
+2) lancer le serveur Whiteboard :
+   java go.whiteboard.WhiteboardServer
+
+3) lancer des clients (chacun a un nom aléatoire) :
+   java go.whiteboard.Whiteboard
+
+----------------
+
+Pour lancer les deux serveurs et trois clients :
+     ./go/whiteboard/launch
+`killall java` pour tout arrêter.
+
+----------------------------------------------------------------
+
+Pour exécuter le whiteboard avec plusieurs machines :
+ (https://docs.oracle.com/javase/7/docs/technotes/guides/rmi/faq.html#domain)
+
+java -Djava.rmi.server.hostname=vrainomdelamachine ...
+(il s'agit de la machine où ce code s'exécute, pas du serveur rmi)
+
+Par exemple, serveur sur gorgone et clients sur gobelin et turing :
+queinnec@gorgone$ java -Djava.rmi.server.hostname=gorgone go.cs.ServerImpl
+queinnec@gorgone$ java -Djava.rmi.server.hostname=gorgone go.whiteboard.WhiteboardServer
+queinnec@gobelin$ java -Djava.rmi.server.hostname=gobelin go.whiteboard.Whiteboard 
+queinnec@turing$ java -Djava.rmi.server.hostname=turing go.whiteboard.Whiteboard
+(avec Config.RMIRegistry contient "gorgone")
+
+----------------------------------------------------------------

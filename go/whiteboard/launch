@@ -1,0 +1,12 @@
+#!/bin/sh
+# Pour tout arrêter : killall java
+
+java go.cs.ServerImpl &
+sleep 1
+java go.whiteboard.WhiteboardServer &
+sleep 1
+java go.whiteboard.Whiteboard &
+java go.whiteboard.Whiteboard &
+java go.whiteboard.Whiteboard &
+
+
