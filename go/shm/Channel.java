@@ -44,7 +44,13 @@ public class Channel<T> implements go.Channel<T> {
             inObservers.clear();
 
             notifyAll();
+        }
 
+        for (Observer observer : toNotify) {
+            observer.update();
+        }
+
+        synchronized (this) {
             while (hasValue) {
                 try {
                     this.wait();
@@ -54,9 +60,6 @@ public class Channel<T> implements go.Channel<T> {
             }
         }
 
-        for (Observer observer : toNotify) {
-            observer.update();
-        }
     }
 
     public T in() {
@@ -77,17 +80,19 @@ public class Channel<T> implements go.Channel<T> {
                     Thread.currentThread().interrupt();
                 }
             }
+        }
 
+        for (Observer observer : toNotify) {
+            observer.update();
+        }
+
+        synchronized (this) {
             res = value;
             hasValue = false;
             waitingReceivers--;
 
             // Temporary notifyAll
             notifyAll();
-        }
-
-        for (Observer observer : toNotify) {
-            observer.update();
         }
 
         return res;
