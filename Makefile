@@ -28,7 +28,7 @@ test-shm20: compile
 	@echo "Running TestShm20..."
 	java go.test.TestShm20
 
-test-all-shm: test-factory test-shm01 test-shm11 test-shm13 test-shm20
+test-all-shm: test-factory test-shm01 test-shm03 test-shm11 test-shm13 test-shm20
 	@echo "All Shared Memory tests completed!"
 
 clean:
