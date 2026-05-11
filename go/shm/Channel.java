@@ -13,7 +13,8 @@ public class Channel<T> implements go.Channel<T> {
     private boolean hasValue = false;
     private int waitingReceivers = 0;
 
-    // Implements the observer pattern for in and out operations, with separate lists of observers for each direction.
+    // Implements the observer pattern for in and out operations, with separate
+    // lists of observers for each direction.
     // see: https://refactoring.guru/design-patterns/observer
     private final List<Observer> inObservers = new ArrayList<>();
     private final List<Observer> outObservers = new ArrayList<>();
@@ -25,11 +26,12 @@ public class Channel<T> implements go.Channel<T> {
     public void out(T v) {
         List<Observer> toNotify = new ArrayList<>();
 
-        synchronized(this){
+        synchronized (this) {
 
             value = v;
             hasValue = true;
-            // Notify observers of an out operation, then clear the list of observers to notify.
+            // Notify observers of an out operation, then clear the list of observers to
+            // notify.
             toNotify.addAll(inObservers);
             inObservers.clear();
 
@@ -46,12 +48,12 @@ public class Channel<T> implements go.Channel<T> {
             observer.update();
         }
     }
-    
+
     public T in() {
         List<Observer> toNotify = new ArrayList<>();
         T res;
 
-        synchronized(this){
+        synchronized (this) {
             waitingReceivers++;
 
             // Gathers observers to notify, then clear the list of observers to notify.
@@ -77,7 +79,7 @@ public class Channel<T> implements go.Channel<T> {
         for (Observer observer : toNotify) {
             observer.update();
         }
-        
+
         return res;
     }
 
@@ -87,7 +89,7 @@ public class Channel<T> implements go.Channel<T> {
 
     public void observe(Direction direction, Observer observer) {
         if (direction == Direction.In) {
-            synchronized(this){
+            synchronized (this) {
                 if (hasValue) {
                     observer.update();
                 } else {
@@ -96,7 +98,7 @@ public class Channel<T> implements go.Channel<T> {
                 }
             }
         } else {
-            synchronized(this){
+            synchronized (this) {
                 // Observe if no receiver yet
                 if (waitingReceivers > 0) {
                     observer.update();

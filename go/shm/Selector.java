@@ -24,11 +24,12 @@ public class Selector implements go.Selector {
             Channel channel = entry.getKey();
             Direction direction = entry.getValue();
 
-            // Register an observer for the channel and direction, which will set readyChannel when the channel is ready.
+            // Register an observer for the channel and direction, which will set
+            // readyChannel when the channel is ready.
             Observer customObserver = new Observer() {
                 @Override
                 public void update() {
-                    synchronized(Selector.this) {
+                    synchronized (Selector.this) {
                         if (readyChannel == null) {
                             readyChannel = channel;
                             Selector.this.notify(); // Notify the select method that a channel is ready.
@@ -40,11 +41,13 @@ public class Selector implements go.Selector {
             channel.observe(direction, customObserver);
         }
 
-        while (readyChannel == null) {
-            try {
-                wait();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        synchronized (this) {
+            while (readyChannel == null) {
+                try {
+                    wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
             }
         }
         return readyChannel;
