@@ -9,3 +9,6 @@ We will focus on 3 different implementations, and would like to implement a benc
 * TestSelector.java: tests for the selector class that allows for selecting between multiple channels, ensuring that it correctly handles cases where multiple channels are ready for communication and that it correctly handles cases where no channels are ready.
 
 Run the tests: 
+```bash
+make -k test-all-shm
+```

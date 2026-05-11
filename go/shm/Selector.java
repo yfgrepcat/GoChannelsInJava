@@ -19,7 +19,7 @@ public class Selector implements go.Selector {
 
     public Channel select() {
         readyChannel = null;
-        Map<Channel, Direction> registeredObservers = new HashMap<>();
+        Map<Channel, Observer> registeredObservers = new HashMap<>();
         for (Map.Entry<Channel, Direction> entry : watchedChannels.entrySet()) {
             Channel channel = entry.getKey();
             Direction direction = entry.getValue();
