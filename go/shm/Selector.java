@@ -1,4 +1,4 @@
-package go.cs;
+package go.shm;
 
 import go.Direction;
 import go.Observer;
