@@ -3,17 +3,26 @@ package go.shm;
 import java.util.ArrayList;
 import java.util.List;
 
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
 import go.Direction;
 import go.Observer;
 
 public class Channel<T> implements go.Channel<T> {
 
+    // Added ReentrantLock and Condition to manage waiting threads more efficiently than using wait / notifyAll
+    private final ReentrantLock lock = new ReentrantLock(true); // true to use fair ordering of threads
+    private final Condition waitingSenders = lock.newCondition();
+    private final Condition waitingForAck = lock.newCondition();
+    private final Condition waitingReceivers = lock.newCondition();
+
     private final String name;
     private T value;
     private boolean hasValue = false;
-    private int waitingReceivers = 0;
+    private int receiverCount = 0;
 
-    // Implements the observer pattern for in and out operations, with separate
+    // Implements the observer pattern for in    and out operations, with separate
     // lists of observers for each direction.
     // see: https://refactoring.guru/design-patterns/observer
     private final List<Observer> inObservers = new ArrayList<>();
@@ -26,73 +35,65 @@ public class Channel<T> implements go.Channel<T> {
     public void out(T v) {
         List<Observer> toNotify = new ArrayList<>();
 
-        synchronized (this) {
-
+        lock.lock();
+        try {
             while (hasValue) {
-                try {
-                    this.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
-
-            value = v;
-            hasValue = true;
-            // Notify observers of an out operation, then clear the list of observers to
-            // notify.
-            toNotify.addAll(inObservers);
-            inObservers.clear();
-
-            notifyAll();
+                waitingSenders.await();
         }
+        value = v;
+        hasValue = true;
+        // Notify observers of an out operation, then clear the list of observers to
+        // notify.
+        toNotify.addAll(outObservers);
+        outObservers.clear();
+
+        waitingReceivers.signal(); // Signal one waiting receiver
 
         for (Observer observer : toNotify) {
             observer.update();
         }
 
-        synchronized (this) {
-            while (hasValue) {
-                try {
-                    this.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
-            }
+        while (hasValue) {
+            waitingForAck.await();
         }
 
+        waitingSenders.signal();
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            lock.unlock();
+        }
     }
 
     public T in() {
         List<Observer> toNotify = new ArrayList<>();
-        T res;
+        T res = null;
 
-        synchronized (this) {
-            waitingReceivers++;
+        lock.lock();
+        try {
+            receiverCount++;
 
-            // Gathers observers to notify, then clear the list of observers to notify.
-            toNotify.addAll(outObservers);
-            outObservers.clear();
+            toNotify.addAll(inObservers); // Gather observers to notify
+            inObservers.clear(); // Clear the list of observers to notify, as they will be notified now.
 
-            while (!hasValue) {
-                try {
-                    this.wait();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                }
+            for (Observer observer : toNotify) {
+                observer.update();
             }
-        }
 
-        for (Observer observer : toNotify) {
-            observer.update();
-        }
+            while(!hasValue) {
+                waitingReceivers.await();
+            }
 
-        synchronized (this) {
             res = value;
             hasValue = false;
-            waitingReceivers--;
+            receiverCount--;
 
-            // Temporary notifyAll
-            notifyAll();
+            waitingForAck.signal(); // Signal one waiting sender
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            lock.unlock();
         }
 
         return res;
@@ -103,24 +104,21 @@ public class Channel<T> implements go.Channel<T> {
     }
 
     public void observe(Direction direction, Observer observer) {
-        if (direction == Direction.In) {
-            synchronized (this) {
-                if (hasValue) {
-                    observer.update();
-                } else {
-                    // Observe if no data yet
+        lock.lock();
+        try {
+            if (direction == Direction.In && receiverCount > 0) {
+                observer.update();
+            } else if (direction == Direction.Out && hasValue) {
+                observer.update();
+            } else {
+                if (direction == Direction.In) {
                     inObservers.add(observer);
-                }
-            }
-        } else {
-            synchronized (this) {
-                // Observe if no receiver yet
-                if (waitingReceivers > 0) {
-                    observer.update();
                 } else {
                     outObservers.add(observer);
                 }
             }
+        } finally {
+            lock.unlock();
         }
     }
 }

@@ -23,6 +23,7 @@ public class Selector implements go.Selector {
         for (Map.Entry<Channel, Direction> entry : watchedChannels.entrySet()) {
             Channel channel = entry.getKey();
             Direction direction = entry.getValue();
+            Direction observeDir = (direction == Direction.In) ? Direction.Out : Direction.In;
 
             // Register an observer for the channel and direction, which will set
             // readyChannel when the channel is ready.
@@ -38,7 +39,7 @@ public class Selector implements go.Selector {
                 }
             };
             registeredObservers.put(channel, customObserver);
-            channel.observe(direction, customObserver);
+            channel.observe(observeDir, customObserver);
         }
 
         synchronized (this) {
