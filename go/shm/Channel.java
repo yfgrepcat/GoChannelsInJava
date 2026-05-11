@@ -23,14 +23,14 @@ public class Channel<T> implements go.Channel<T> {
     }
 
     public void out(T v) {
-        List<Observer> toNotifiy = new ArrayList<>();
+        List<Observer> toNotify = new ArrayList<>();
 
         synchronized(this){
 
             value = v;
             hasValue = true;
             // Notify observers of an out operation, then clear the list of observers to notify.
-            toNotifiy.addAll(inObservers);
+            toNotify.addAll(inObservers);
             inObservers.clear();
 
             while (hasValue) {
@@ -42,13 +42,13 @@ public class Channel<T> implements go.Channel<T> {
             }
         }
 
-        for (Observer observer : toNotifiy) {
+        for (Observer observer : toNotify) {
             observer.update();
         }
     }
     
     public T in() {
-        List<Observer> toNotifiy = new ArrayList<>();
+        List<Observer> toNotify = new ArrayList<>();
         T res;
 
         synchronized(this){
@@ -74,7 +74,7 @@ public class Channel<T> implements go.Channel<T> {
             notifyAll();
         }
 
-        for (Observer observer : toNotifiy) {
+        for (Observer observer : toNotify) {
             observer.update();
         }
         
