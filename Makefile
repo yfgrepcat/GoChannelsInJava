@@ -12,6 +12,10 @@ test-shm01: compile
 	@echo "Running TestShm01..."
 	java go.test.TestShm01
 
+test-shm03: compile
+	@echo "Running TestShm03..."
+	java go.test.TestShm03
+
 test-shm11: compile
 	@echo "Running TestShm11..."
 	java go.test.TestShm11
@@ -32,4 +36,4 @@ clean:
 	find go -name "*.class" -type f -delete
 	@echo "Clean complete!"
 
-.PHONY: all compile test-factory test-shm01 test-shm11 test-shm13 test-shm20 test-all-shm clean
+.PHONY: all compile test-factory test-shm01 test-shm03 test-shm11 test-shm13 test-shm20 test-all-shm clean

@@ -27,11 +27,21 @@ public class Channel<T> implements go.Channel<T> {
 
         synchronized(this){
 
+            while (hasValue) {
+                try {
+                    this.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
             value = v;
             hasValue = true;
             // Notify observers of an out operation, then clear the list of observers to notify.
             toNotify.addAll(inObservers);
             inObservers.clear();
+
+            notifyAll();
 
             while (hasValue) {
                 try {
