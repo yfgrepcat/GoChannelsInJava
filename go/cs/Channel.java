@@ -1,29 +1,109 @@
 package go.cs;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import go.Direction;
 import go.Observer;
 
 public class Channel<T> implements go.Channel<T> {
 
+    private final String name;
+    private T value;
+    private boolean hasValue = false;
+    private int waitingReceivers = 0;
+
+    // Implements the observer pattern for in and out operations, with separate lists of observers for each direction.
+    // see: https://refactoring.guru/design-patterns/observer
+    private final List<Observer> inObservers = new ArrayList<>();
+    private final List<Observer> outObservers = new ArrayList<>();
+
     public Channel(String name) {
-        // TODO
+        this.name = name;
     }
 
     public void out(T v) {
-        // TODO
+        List<Observer> toNotifiy = new ArrayList<>();
+
+        synchronized(this){
+
+            value = v;
+            hasValue = true;
+            // Notify observers of an out operation, then clear the list of observers to notify.
+            toNotifiy.addAll(inObservers);
+            inObservers.clear();
+
+            while (hasValue) {
+                try {
+                    this.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        for (Observer observer : toNotifiy) {
+            observer.update();
+        }
     }
     
     public T in() {
-        // TODO
-        return null;
+        List<Observer> toNotifiy = new ArrayList<>();
+        T res;
+
+        synchronized(this){
+            waitingReceivers++;
+
+            // Gathers observers to notify, then clear the list of observers to notify.
+            toNotify.addAll(outObservers);
+            outObservers.clear();
+
+            while (!hasValue) {
+                try {
+                    this.wait();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+
+            res = value;
+            hasValue = false;
+            waitingReceivers--;
+
+            // Temporary notifyAll
+            notifyAll();
+        }
+
+        for (Observer observer : toNotifiy) {
+            observer.update();
+        }
+        
+        return res;
     }
 
     public String getName() {
-        // TODO
-        return null;
+        return name;
     }
 
     public void observe(Direction direction, Observer observer) {
-        // TODO
+        if (direction == Direction.In) {
+            synchronized(this){
+                if (hasValue) {
+                    observer.update();
+                } else {
+                    // Observe if no data yet
+                    inObservers.add(observer);
+                }
+            }
+        } else {
+            synchronized(this){
+                // Observe if no receiver yet
+                if (waitingReceivers > 0) {
+                    observer.update();
+                } else {
+                    outObservers.add(observer);
+                }
+            }
+        }
     }
 }
