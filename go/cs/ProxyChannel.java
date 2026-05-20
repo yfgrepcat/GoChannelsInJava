@@ -2,6 +2,7 @@ package go.cs;
 
 import go.Observer;
 import go.Direction;
+import java.rmi.Remote
 
 public class ProxyChannel implements go.Channel<T> {
 
