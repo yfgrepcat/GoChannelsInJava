@@ -22,7 +22,7 @@ public class Channel<T> implements go.Channel<T> {
     private boolean hasValue = false;
     private int receiverCount = 0;
 
-    // Implements the observer pattern for in    and out operations, with separate
+    // Implements the observer pattern for in and out operations, with separate
     // lists of observers for each direction.
     // see: https://refactoring.guru/design-patterns/observer
     private final List<Observer> inObservers = new ArrayList<>();
@@ -51,6 +51,8 @@ public class Channel<T> implements go.Channel<T> {
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            waitingSenders.signal(); // Ensure that waiting senders are not left hanging if interrupted
+            return; // Exit the method if interrupted
         } finally {
             lock.unlock();
         }
@@ -62,10 +64,10 @@ public class Channel<T> implements go.Channel<T> {
 
         lock.lock();
         try{
-        while (hasValue) {
-            waitingForAck.await();
-        }
-         waitingSenders.signal(); 
+            while (hasValue) {
+                waitingForAck.await();
+            }
+            waitingSenders.signal(); 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
@@ -81,7 +83,6 @@ public class Channel<T> implements go.Channel<T> {
         lock.lock();
         try {
             receiverCount++;
-
             toNotify.addAll(inObservers); // Gather observers to notify
             inObservers.clear(); // Clear the list of observers to notify, as they will be notified now.
 
@@ -89,18 +90,19 @@ public class Channel<T> implements go.Channel<T> {
                 observer.update();
             }
 
+            lock.lock();
             while(!hasValue) {
                 waitingReceivers.await();
             }
 
             res = value;
             hasValue = false;
-            receiverCount--;
-
             waitingForAck.signal(); // Signal one waiting sender
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            waitingReceivers.signal(); // Ensure that waiting receivers are not left hanging if interrupted
         } finally {
+            receiverCount--;
             lock.unlock();
         }
 
@@ -124,6 +126,20 @@ public class Channel<T> implements go.Channel<T> {
                 } else {
                     outObservers.add(observer);
                 }
+            }
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    // Unobserve method fixes potential memory leak
+    public void unobserve(Direction direction, Observer observer) {
+        lock.lock();
+        try {
+            if (direction == Direction.In) {
+                inObservers.remove(observer);
+            } else {
+                outObservers.remove(observer);
             }
         } finally {
             lock.unlock();
