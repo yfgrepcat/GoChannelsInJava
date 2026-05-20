@@ -1,29 +1,35 @@
 package go.cs;
 
-import go.Direction;
+
 import go.Observer;
 
-public class Channel<T> implements go.Channel<T> {
+import java.rmi.RemoteException;
 
-    public Channel(String name) {
+import go.Direction;
+
+
+public class Channel<T> extends java.rmi.server.UnicastRemoteObject implements RemoteChannel<T> {
+
+
+    public Channel(String name) throws RemoteException {
         // TODO
     }
 
-    public void out(T v) {
+    public void out(T v) throws RemoteException {
         // TODO
     }
     
-    public T in() {
+    public T in() throws RemoteException {
         // TODO
         return null;
     }
 
-    public String getName() {
+    public String getName() throws RemoteException {
         // TODO
         return null;
     }
 
-    public void observe(Direction direction, Observer observer) {
+    public void observe(Direction direction, Observer observer) throws RemoteException {
         // TODO
     }
 }
