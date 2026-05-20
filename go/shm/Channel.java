@@ -11,20 +11,26 @@ import go.Observer;
 
 public class Channel<T> implements go.Channel<T> {
 
-    // Added ReentrantLock and Condition to manage waiting threads more efficiently than using wait / notifyAll
-    private final ReentrantLock lock = new ReentrantLock(true); // true to use fair ordering of threads
-    private final Condition waitingSenders = lock.newCondition();
-    private final Condition waitingForAck = lock.newCondition();
-    private final Condition waitingReceivers = lock.newCondition();
+    // senderLock serialises concurrent out() calls so that at most one sender
+    // is "in transit" at a time. Without this, the gap between setting
+    // hasValue=true (block 1) and waiting on waitingForAck (block 2) lets a
+    // second sender slip in and overwrite hasValue. Then both senders end up
+    // awaiting waitingForAck and signal() (woken by a single in()) only
+    // releases one of them: the other deadlocks. Serialising senders keeps a
+    // single waiter on waitingForAck, so signal() is sufficient.
+    private final ReentrantLock senderLock = new ReentrantLock(true);
+
+    // stateLock protects channel state (value, hasValue, observer lists,
+    // receiverCount). Conditions belong to this lock.
+    private final ReentrantLock stateLock = new ReentrantLock(true);
+    private final Condition waitingReceivers = stateLock.newCondition();
+    private final Condition waitingForAck = stateLock.newCondition();
 
     private final String name;
     private T value;
     private boolean hasValue = false;
     private int receiverCount = 0;
 
-    // Implements the observer pattern for in and out operations, with separate
-    // lists of observers for each direction.
-    // see: https://refactoring.guru/design-patterns/observer
     private final List<Observer> inObservers = new ArrayList<>();
     private final List<Observer> outObservers = new ArrayList<>();
 
@@ -33,77 +39,92 @@ public class Channel<T> implements go.Channel<T> {
     }
 
     public void out(T v) {
-        List<Observer> toNotify = new ArrayList<>();
-
-        lock.lock();
+        senderLock.lock();
         try {
-            while (hasValue) {
-                waitingSenders.await();
-        }
-        value = v;
-        hasValue = true;
-        // Notify observers of an out operation, then clear the list of observers to
-        // notify.
-        toNotify.addAll(outObservers);
-        outObservers.clear();
+            List<Observer> toNotify;
 
-        waitingReceivers.signal(); // Signal one waiting receiver
-
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            waitingSenders.signal(); // Ensure that waiting senders are not left hanging if interrupted
-            return; // Exit the method if interrupted
-        } finally {
-            lock.unlock();
-        }
-
-        // Moved update calls outside of the lock to avoid potential deadlocks if observers call back into the channel.
-        for (Observer observer : toNotify) {
-            observer.update();
-        }
-
-        lock.lock();
-        try{
-            while (hasValue) {
-                waitingForAck.await();
+            stateLock.lock();
+            try {
+                // In steady state hasValue is already false here (the previous
+                // sender's block 2 ensured it before releasing senderLock).
+                // The loop only matters if a previous sender was interrupted
+                // while its value still sat in the channel.
+                while (hasValue) {
+                    waitingForAck.await();
+                }
+                value = v;
+                hasValue = true;
+                toNotify = new ArrayList<>(outObservers);
+                outObservers.clear();
+                waitingReceivers.signal();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            } finally {
+                stateLock.unlock();
             }
-            waitingSenders.signal(); 
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        } finally {
-            lock.unlock();
-        }
 
+            // Fire observers outside both locks. Selectors' update() may take
+            // their own monitor; firing under stateLock would risk deadlock,
+            // and firing under senderLock would needlessly block other ops.
+            for (Observer observer : toNotify) {
+                observer.update();
+            }
+
+            stateLock.lock();
+            try {
+                while (hasValue) {
+                    waitingForAck.await();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                stateLock.unlock();
+            }
+        } finally {
+            senderLock.unlock();
+        }
     }
 
     public T in() {
         List<Observer> toNotify = new ArrayList<>();
         T res = null;
 
-        lock.lock();
+        stateLock.lock();
         try {
             receiverCount++;
-            toNotify.addAll(inObservers); // Gather observers to notify
-            inObservers.clear(); // Clear the list of observers to notify, as they will be notified now.
-
-            for (Observer observer : toNotify) {
-                observer.update();
+            // Only fire in-observers when this in() will actually wait: if
+            // hasValue is already true we consume immediately, so there is no
+            // real "receiver is waiting" opportunity to announce. Firing
+            // anyway would wake intent-out selectors and cause spurious extra
+            // out() calls that have no matching consumer.
+            if (!hasValue) {
+                toNotify.addAll(inObservers);
+                inObservers.clear();
             }
+        } finally {
+            stateLock.unlock();
+        }
 
-            lock.lock();
-            while(!hasValue) {
+        for (Observer observer : toNotify) {
+            observer.update();
+        }
+
+        stateLock.lock();
+        try {
+            while (!hasValue) {
                 waitingReceivers.await();
             }
-
             res = value;
+            value = null;
             hasValue = false;
-            waitingForAck.signal(); // Signal one waiting sender
+            waitingForAck.signal();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            waitingReceivers.signal(); // Ensure that waiting receivers are not left hanging if interrupted
+            waitingReceivers.signal();
         } finally {
             receiverCount--;
-            lock.unlock();
+            stateLock.unlock();
         }
 
         return res;
@@ -114,27 +135,34 @@ public class Channel<T> implements go.Channel<T> {
     }
 
     public void observe(Direction direction, Observer observer) {
-        lock.lock();
+        boolean fireNow = false;
+        stateLock.lock();
         try {
-            if (direction == Direction.In && receiverCount > 0) {
-                observer.update();
+            if (direction == Direction.In && receiverCount > 0 && !hasValue) {
+                // A receiver is actually blocked waiting for a value (no
+                // value in transit yet): a real opportunity for an intent-out
+                // user. If hasValue is true the receiver would just consume
+                // and leave, so there is no opportunity to announce.
+                fireNow = true;
             } else if (direction == Direction.Out && hasValue) {
-                observer.update();
+                fireNow = true;
+            } else if (direction == Direction.In) {
+                inObservers.add(observer);
             } else {
-                if (direction == Direction.In) {
-                    inObservers.add(observer);
-                } else {
-                    outObservers.add(observer);
-                }
+                outObservers.add(observer);
             }
         } finally {
-            lock.unlock();
+            stateLock.unlock();
+        }
+        // Fire outside the lock: the observer's update() may acquire other
+        // monitors (e.g. the Selector's), and we must not invite a deadlock.
+        if (fireNow) {
+            observer.update();
         }
     }
 
-    // Unobserve method fixes potential memory leak
     public void unobserve(Direction direction, Observer observer) {
-        lock.lock();
+        stateLock.lock();
         try {
             if (direction == Direction.In) {
                 inObservers.remove(observer);
@@ -142,7 +170,7 @@ public class Channel<T> implements go.Channel<T> {
                 outObservers.remove(observer);
             }
         } finally {
-            lock.unlock();
+            stateLock.unlock();
         }
     }
 }
