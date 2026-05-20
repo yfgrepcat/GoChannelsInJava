@@ -10,7 +10,6 @@ import java.util.Map;
 public class Selector implements go.Selector {
 
     private final Map<Channel, Direction> watchedChannels;
-    private Channel readyChannel = null;
 
     public Selector(Map<Channel, Direction> channels) {
         this.watchedChannels = new HashMap<>(channels);
@@ -21,7 +20,8 @@ public class Selector implements go.Selector {
         // because we haven't unobserved it yet, but already drained by an
         // in()/out() in another thread) must not poison readyChannel (error on select().)
         final boolean[] active = { true };
-        readyChannel = null;
+        final Channel[] localReadyChannel = { null };
+        final Object lock = new Object();
         Map<Channel, Observer> registeredObservers = new HashMap<>();
 
         try {
@@ -35,10 +35,10 @@ public class Selector implements go.Selector {
                 Observer customObserver = new Observer() {
                     @Override
                     public void update() {
-                        synchronized (Selector.this) {
-                            if (active[0] && readyChannel == null) {
-                                readyChannel = channel;
-                                Selector.this.notify();
+                        synchronized (lock) {
+                            if (active[0] && localReadyChannel[0] == null) {
+                                localReadyChannel[0] = channel;
+                                lock.notify();
                             }
                         }
                     }
@@ -47,27 +47,31 @@ public class Selector implements go.Selector {
                 channel.observe(observeDir, customObserver);
             }
 
-            synchronized (this) {
-                while (readyChannel == null) {
+            synchronized (lock) {
+                boolean interrupted = false;
+                while (localReadyChannel[0] == null) {
                     try {
-                        wait();
+                        lock.wait();
                     } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
+                        interrupted = true;
                     }
                 }
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                    }
+                }
+            } finally {
+                synchronized (lock) {
+                    active[0] = false;
+                }
+                for (Map.Entry<Channel, Observer> entry : registeredObservers.entrySet()) {
+                    Channel channel = entry.getKey();
+                    Observer observer = entry.getValue();
+                    Direction direction = watchedChannels.get(channel);
+                    Direction observeDir = (direction == Direction.In) ? Direction.Out : Direction.In;
+                    ((go.shm.Channel) channel).unobserve(observeDir, observer);
+                }
             }
-        } finally {
-            synchronized (this) {
-                active[0] = false;
-            }
-            for (Map.Entry<Channel, Observer> entry : registeredObservers.entrySet()) {
-                Channel channel = entry.getKey();
-                Observer observer = entry.getValue();
-                Direction direction = watchedChannels.get(channel);
-                Direction observeDir = (direction == Direction.In) ? Direction.Out : Direction.In;
-                ((go.shm.Channel) channel).unobserve(observeDir, observer);
-            }
-        }
-        return readyChannel;
+        return localReadyChannel[0];
     }
 }
