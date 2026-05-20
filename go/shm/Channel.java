@@ -45,21 +45,22 @@ public class Channel<T> implements go.Channel<T> {
 
             stateLock.lock();
             try {
-                // In steady state hasValue is already false here (the previous
-                // sender's block 2 ensured it before releasing senderLock).
-                // The loop only matters if a previous sender was interrupted
-                // while its value still sat in the channel.
+                boolean interrupted = false;
                 while (hasValue) {
-                    waitingForAck.await();
+                    try {
+                        waitingForAck.await();
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
                 }
                 value = v;
                 hasValue = true;
                 toNotify = new ArrayList<>(outObservers);
                 outObservers.clear();
                 waitingReceivers.signal();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                return;
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                }
             } finally {
                 stateLock.unlock();
             }
@@ -73,11 +74,17 @@ public class Channel<T> implements go.Channel<T> {
 
             stateLock.lock();
             try {
+                boolean interrupted = false;
                 while (hasValue) {
-                    waitingForAck.await();
+                    try {
+                        waitingForAck.await();
+                    } catch (InterruptedException e) {
+                        interrupted = true;
+                    }
                 }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+                if (interrupted) {
+                    Thread.currentThread().interrupt();
+                }
             } finally {
                 stateLock.unlock();
             }
@@ -112,16 +119,23 @@ public class Channel<T> implements go.Channel<T> {
 
         stateLock.lock();
         try {
+            boolean interrupted = false;
             while (!hasValue) {
-                waitingReceivers.await();
+                try {
+                    waitingReceivers.await();
+                } catch (InterruptedException e) {
+                    interrupted = true;
+                    waitingReceivers.signal();
+                }
             }
             res = value;
             value = null;
             hasValue = false;
             waitingForAck.signal();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            waitingReceivers.signal();
+            
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
         } finally {
             receiverCount--;
             stateLock.unlock();
@@ -138,7 +152,7 @@ public class Channel<T> implements go.Channel<T> {
         boolean fireNow = false;
         stateLock.lock();
         try {
-            if (direction == Direction.In && receiverCount > 0 && !hasValue) {
+            if (direction == Direction.In && receiverCount > 0 && (hasValue ? 1 : 0) > 0) {
                 // A receiver is actually blocked waiting for a value (no
                 // value in transit yet): a real opportunity for an intent-out
                 // user. If hasValue is true the receiver would just consume
