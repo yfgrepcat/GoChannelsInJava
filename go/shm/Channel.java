@@ -49,21 +49,29 @@ public class Channel<T> implements go.Channel<T> {
 
         waitingReceivers.signal(); // Signal one waiting receiver
 
-        for (Observer observer : toNotify) {
-            observer.update();
-        }
-
-        while (hasValue) {
-            waitingForAck.await();
-        }
-
-        waitingSenders.signal();
-
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
         } finally {
             lock.unlock();
         }
+
+        // Moved update calls outside of the lock to avoid potential deadlocks if observers call back into the channel.
+        for (Observer observer : toNotify) {
+            observer.update();
+        }
+
+        lock.lock();
+        try{
+        while (hasValue) {
+            waitingForAck.await();
+        }
+         waitingSenders.signal(); 
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            lock.unlock();
+        }
+
     }
 
     public T in() {
