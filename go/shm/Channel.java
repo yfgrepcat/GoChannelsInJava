@@ -9,7 +9,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import go.Direction;
 import go.Observer;
 
-public class Channel<T> implements go.Channel<T> {
+public class Channel<T> implements go.Channel<T>, go.ChannelInterfaceDev<T> {
 
     // senderLock serialises concurrent out() calls so that at most one sender
     // is "in transit" at a time. Without this, the gap between setting
@@ -175,6 +175,7 @@ public class Channel<T> implements go.Channel<T> {
         }
     }
 
+    @Override
     public void unobserve(Direction direction, Observer observer) {
         stateLock.lock();
         try {
@@ -183,6 +184,23 @@ public class Channel<T> implements go.Channel<T> {
             } else {
                 outObservers.remove(observer);
             }
+        } finally {
+            stateLock.unlock();
+        }
+    }
+
+    // Snapshot non bloquant de la disponibilité du canal pour la direction
+    // demandée. Mêmes conditions que le déclenchement immédiat dans observe() :
+    // - In  : un in() peut consommer tout de suite s'il y a une valeur en transit
+    // - Out : un out() peut s'effectuer s'il y a un lecteur en attente et le slot libre
+    @Override
+    public boolean ready(Direction dir) {
+        stateLock.lock();
+        try {
+            return switch (dir) {
+                case In  -> hasValue;
+                case Out -> receiverCount > 0 && !hasValue;
+            };
         } finally {
             stateLock.unlock();
         }

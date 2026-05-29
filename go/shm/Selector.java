@@ -24,6 +24,16 @@ public class Selector implements go.Selector {
         final Object lock = new Object();
         Map<Channel, Observer> registeredObservers = new HashMap<>();
 
+        // Fast path: si un canal est déjà servissable, on le prend tout de suite
+        // sans enregistrer d'observateur. ready() est un snapshot non bloquant.
+        for (Map.Entry<Channel, Direction> entry : watchedChannels.entrySet()) {
+            Channel channel = entry.getKey();
+            Direction direction = entry.getValue();
+            if (((go.ChannelInterfaceDev<?>) channel).ready(direction)) {
+                return channel;
+            }
+        }
+
         try {
             for (Map.Entry<Channel, Direction> entry : watchedChannels.entrySet()) {
                 Channel channel = entry.getKey();
@@ -69,7 +79,7 @@ public class Selector implements go.Selector {
                     Observer observer = entry.getValue();
                     Direction direction = watchedChannels.get(channel);
                     Direction observeDir = (direction == Direction.In) ? Direction.Out : Direction.In;
-                    ((go.shm.Channel) channel).unobserve(observeDir, observer);
+                    ((go.ChannelInterfaceDev<?>) channel).unobserve(observeDir, observer);
                 }
             }
         return localReadyChannel[0];
