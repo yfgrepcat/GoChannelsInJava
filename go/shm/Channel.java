@@ -152,7 +152,7 @@ public class Channel<T> implements go.Channel<T> {
         boolean fireNow = false;
         stateLock.lock();
         try {
-            if (direction == Direction.In && receiverCount > 0 && (hasValue ? 1 : 0) > 0) {
+            if (direction == Direction.In && receiverCount > 0 && !hasValue) {
                 // A receiver is actually blocked waiting for a value (no
                 // value in transit yet): a real opportunity for an intent-out
                 // user. If hasValue is true the receiver would just consume
