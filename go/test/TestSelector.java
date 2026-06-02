@@ -50,8 +50,6 @@ public class TestSelector {
         Selector selector = factory.newSelector(channelsToObserve);
         Channel ready = selector.select();
 
-        // ---------------------------------------------------------
-
         if (ready != c1) {
             quit("KO (wrong channel selected, expected c1)");
         }

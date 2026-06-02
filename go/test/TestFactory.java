@@ -1,5 +1,90 @@
 package go.test;
 
+import go.Channel;
+import go.Direction;
+import go.Factory;
+import go.Selector;
+
+import java.util.Set;
+
+/** Tests unitaires du contrat go.Factory (implantation shm) :
+ *   - newChannel rend le MÊME objet pour un même nom (cache par nom, comme le
+ *     précise la doc : « les appels suivants avec le même nom donneront accès
+ *     au même canal ») ;
+ *   - deux noms distincts donnent deux canaux distincts et indépendants ;
+ *   - newSelector(Set, Direction) accepte bien l'ensemble fourni.
+ *  Ces aspects ne sont couverts par aucun scénario numéroté.
+ */
 public class TestFactory {
-    // TODO
+
+    private static void quit(String msg) {
+        System.out.println("TestFactory: " + msg);
+        System.exit(msg.equals("ok") ? 0 : 1);
+    }
+
+    public static void main(String[] a) {
+        new Thread(() -> {
+            try { Thread.sleep(2000); } catch (InterruptedException e) { return; }
+            quit("KO (deadlock)");
+        }).start();
+
+        Factory factory = new go.shm.Factory();
+
+        testSameNameSameChannel(factory);
+        testDistinctNamesAreIndependent(factory);
+        testSelectorAcceptsChannels(factory);
+
+        quit("ok");
+    }
+
+    /** Deux appels avec le même nom doivent rendre la même instance de canal. */
+    private static void testSameNameSameChannel(Factory factory) {
+        Channel<Integer> c1 = factory.newChannel("partage");
+        Channel<Integer> c2 = factory.newChannel("partage");
+        if (c1 != c2) {
+            quit("KO (même nom mais canaux différents)");
+        }
+        if (!"partage".equals(c1.getName())) {
+            quit("KO (nom du canal incorrect : " + c1.getName() + ")");
+        }
+    }
+
+    /** Des noms distincts donnent des canaux distincts : une valeur émise sur
+     *  l'un ne doit pas apparaître sur l'autre. */
+    private static void testDistinctNamesAreIndependent(Factory factory) {
+        Channel<Integer> a = factory.newChannel("alpha");
+        Channel<Integer> b = factory.newChannel("beta");
+        if (a == b) {
+            quit("KO (noms distincts mais même canal)");
+        }
+
+        // On envoie sur a et on lit sur a : b ne doit pas interférer.
+        new Thread(() -> a.out(1)).start();
+        new Thread(() -> b.out(2)).start();
+
+        int va = a.in();
+        int vb = b.in();
+        if (va != 1 || vb != 2) {
+            quit("KO (canaux non indépendants : a=" + va + ", b=" + vb + ")");
+        }
+    }
+
+    /** newSelector(Set, Direction) doit produire un sélecteur opérationnel sur
+     *  les canaux fournis. */
+    private static void testSelectorAcceptsChannels(Factory factory) {
+        Channel<Integer> c = factory.newChannel("sel");
+        Selector s = factory.newSelector(Set.of(c), Direction.In);
+
+        new Thread(() -> c.out(5)).start();
+
+        @SuppressWarnings("unchecked")
+        Channel<Integer> ready = s.select();
+        if (ready != c) {
+            quit("KO (sélecteur : mauvais canal rendu)");
+        }
+        int v = ready.in();
+        if (v != 5) {
+            quit("KO (sélecteur : valeur " + v + " au lieu de 5)");
+        }
+    }
 }
