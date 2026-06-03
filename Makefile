@@ -8,6 +8,14 @@ compile:
 	javac $(SOURCES)
 	@echo "Compilation successful!"
 
+test-channel: compile
+	@echo "Running TestChannel..."
+	java go.test.TestChannel
+
+test-factory: compile
+	@echo "Running TestFactory..."
+	java go.test.TestFactory
+
 test-shm01: compile
 	@echo "Running TestShm01..."
 	java go.test.TestShm01
@@ -28,7 +36,7 @@ test-shm20: compile
 	@echo "Running TestShm20..."
 	java go.test.TestShm20
 
-test-all-shm: test-factory test-shm01 test-shm03 test-shm11 test-shm13 test-shm20
+test-all-shm: test-channel test-factory test-shm01 test-shm03 test-shm11 test-shm13 test-shm20
 	@echo "All Shared Memory tests completed!"
 
 test-cs01: compile
@@ -55,4 +63,4 @@ clean:
 	find go -name "*.class" -type f -delete
 	@echo "Clean complete"
 
-.PHONY: all compile test-factory test-shm01 test-shm03 test-shm11 test-shm13 test-shm20 test-all-shm clean
+.PHONY: all compile test-channel test-factory test-shm01 test-shm03 test-shm11 test-shm13 test-shm20 test-all-shm clean

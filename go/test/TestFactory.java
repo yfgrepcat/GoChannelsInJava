@@ -7,14 +7,6 @@ import go.Selector;
 
 import java.util.Set;
 
-/** Tests unitaires du contrat go.Factory (implantation shm) :
- *   - newChannel rend le MÊME objet pour un même nom (cache par nom, comme le
- *     précise la doc : « les appels suivants avec le même nom donneront accès
- *     au même canal ») ;
- *   - deux noms distincts donnent deux canaux distincts et indépendants ;
- *   - newSelector(Set, Direction) accepte bien l'ensemble fourni.
- *  Ces aspects ne sont couverts par aucun scénario numéroté.
- */
 public class TestFactory {
 
     private static void quit(String msg) {
@@ -37,7 +29,6 @@ public class TestFactory {
         quit("ok");
     }
 
-    /** Deux appels avec le même nom doivent rendre la même instance de canal. */
     private static void testSameNameSameChannel(Factory factory) {
         Channel<Integer> c1 = factory.newChannel("partage");
         Channel<Integer> c2 = factory.newChannel("partage");
@@ -49,8 +40,6 @@ public class TestFactory {
         }
     }
 
-    /** Des noms distincts donnent des canaux distincts : une valeur émise sur
-     *  l'un ne doit pas apparaître sur l'autre. */
     private static void testDistinctNamesAreIndependent(Factory factory) {
         Channel<Integer> a = factory.newChannel("alpha");
         Channel<Integer> b = factory.newChannel("beta");
@@ -69,8 +58,6 @@ public class TestFactory {
         }
     }
 
-    /** newSelector(Set, Direction) doit produire un sélecteur opérationnel sur
-     *  les canaux fournis. */
     private static void testSelectorAcceptsChannels(Factory factory) {
         Channel<Integer> c = factory.newChannel("sel");
         Selector s = factory.newSelector(Set.of(c), Direction.In);

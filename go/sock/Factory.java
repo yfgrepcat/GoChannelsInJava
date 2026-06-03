@@ -8,19 +8,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 import go.Direction;
 
-/** Factory de canaux sock.
- *
- *  newChannel :
- *    1. cache local (même nom -> même objet dans la JVM courante) ;
- *    2. on bind un ChannelMaster candidat (pour connaître notre port) ;
- *    3. on tente REGISTER auprès du service de nommage :
- *       - succès -> on est le maître, on garde le candidat ;
- *       - EXISTS -> quelqu'un d'autre détient le canal, on ferme le candidat
- *         et on crée un ChannelSlave qui ira parler au vrai maître.
- *
- *  select() n'est pas demandé par le sujet (§5) : on lève
- *  UnsupportedOperationException.
- */
+
 public class Factory implements go.Factory {
 
     private static volatile Factory INSTANCE;

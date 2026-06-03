@@ -8,11 +8,6 @@ import go.Selector;
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Test du composant Go.Selector (version SHM).
- * Il vérifie la réception d'une donnée en concurrence sur plusieurs canaux.
- */
-
 public class TestSelector {
 
     private static void quit(String msg) {

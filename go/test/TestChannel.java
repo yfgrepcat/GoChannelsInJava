@@ -7,14 +7,7 @@ import go.Factory;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-/** Tests unitaires du contrat go.Channel (implantation shm), pour les aspects
- *  que les scénarios numérotés (TestShm01/03/...) n'exercent pas directement :
- *   - getName() rend bien le nom passé à la fabrique ;
- *   - out() est un rendez-vous synchrone : il ne rend la main qu'une fois la
- *     valeur effectivement consommée par un in() ;
- *   - observe(Direction.In) se déclenche quand un in() est en attente ;
- *   - observe(Direction.Out) se déclenche quand une valeur est en transit.
- */
+
 public class TestChannel {
 
     private static void quit(String msg) {
@@ -38,16 +31,13 @@ public class TestChannel {
         quit("ok");
     }
 
-    /** getName() doit rendre exactement le nom fourni à newChannel. */
     private static void testGetName(Factory factory) {
-        Channel<Integer> c = factory.newChannel("baptise");
-        if (!"baptise".equals(c.getName())) {
-            quit("KO (getName attendu \"baptise\", obtenu \"" + c.getName() + "\")");
+        Channel<Integer> c = factory.newChannel("test");
+        if (!"test".equals(c.getName())) {
+            quit("KO (getName attendu \"test\", obtenu \"" + c.getName() + "\")");
         }
     }
 
-    /** out() ne doit rendre la main qu'après consommation par in() : on vérifie
-     *  que l'émetteur reste bloqué tant qu'aucun lecteur n'a pris la valeur. */
     private static void testRendezVous(Factory factory) {
         Channel<Integer> c = factory.newChannel("rendezvous");
         AtomicBoolean sent = new AtomicBoolean(false);
@@ -58,8 +48,6 @@ public class TestChannel {
         });
         sender.start();
 
-        // Laisse le temps à l'émetteur de déposer la valeur ; comme personne
-        // n'a encore lu, out() doit toujours être bloqué.
         try { Thread.sleep(150); } catch (InterruptedException e) { }
         if (sent.get()) {
             quit("KO (out() a rendu la main avant tout in())");
@@ -70,15 +58,12 @@ public class TestChannel {
             quit("KO (rendez-vous : valeur " + v + " au lieu de 42)");
         }
 
-        // Une fois la valeur consommée, out() doit se débloquer rapidement.
         try { sender.join(500); } catch (InterruptedException e) { }
         if (!sent.get()) {
             quit("KO (out() n'a pas rendu la main après consommation)");
         }
     }
 
-    /** Un observateur en direction In doit être notifié lorsqu'un in() est en
-     *  attente sur le canal (opportunité d'émettre). */
     private static void testObserveIn(Factory factory) {
         Channel<Integer> c = factory.newChannel("observe-in");
         AtomicInteger fired = new AtomicInteger(0);
@@ -104,8 +89,6 @@ public class TestChannel {
         c.out(7);
     }
 
-    /** Un observateur en direction Out doit être notifié lorsqu'une valeur est
-     *  en transit sur le canal (opportunité de recevoir). */
     private static void testObserveOut(Factory factory) {
         Channel<Integer> c = factory.newChannel("observe-out");
         AtomicInteger fired = new AtomicInteger(0);
@@ -123,7 +106,6 @@ public class TestChannel {
             quit("KO (observe-out non déclenché : " + fired.get() + ")");
         }
 
-        // On consomme la valeur pour libérer l'émetteur.
         int v = c.in();
         if (v != 9) {
             quit("KO (observe-out : valeur " + v + " au lieu de 9)");

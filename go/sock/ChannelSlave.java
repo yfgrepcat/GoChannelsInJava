@@ -8,11 +8,6 @@ import java.net.Socket;
 import go.Direction;
 import go.Observer;
 
-/** Côté esclave d'un canal sock : ouvre une nouvelle connexion vers le
- *  ChannelMaster pour chaque opération in/out (cf. choix de conception :
- *  "one socket per call" — simple, parallèle naturellement entre threads,
- *  cohérent avec la nature bloquante des opérations).
- */
 public class ChannelSlave<T> implements go.Channel<T> {
 
     private static final long serialVersionUID = 1L;
@@ -53,9 +48,7 @@ public class ChannelSlave<T> implements go.Channel<T> {
             out.writeByte(ChannelMaster.OP_IN);
             out.flush();
             T v = (T) in.readObject();
-            // ACK : indispensable pour que le producteur (côté maître) ne
-            // soit libéré qu'une fois la valeur effectivement réceptionnée.
-            out.writeByte(ChannelMaster.ACK);
+            out.writeByte(ChannelMaster.ACK); // ACK pour libérer
             out.flush();
             return v;
         } catch (IOException | ClassNotFoundException e) {

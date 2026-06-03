@@ -11,20 +11,6 @@ import java.util.concurrent.CountDownLatch;
 import go.Direction;
 import go.Observer;
 
-/** Côté maître d'un canal sock : un ServerSocket accepte les requêtes
- *  IN/OUT envoyées par les esclaves, et délègue à un canal shm interne
- *  pour la synchronisation effective. Implémente go.Channel<T> pour que
- *  les utilisateurs sur la JVM maître puissent aussi appeler in/out
- *  directement.
- *
- *  Sémantique synchrone bout-en-bout : out(v) bloque jusqu'à ce que la
- *  valeur ait été *réellement* récupérée par le consommateur — local ou
- *  distant. Pour le cas distant, on glisse chaque valeur dans une enveloppe
- *  porteuse d'un CountDownLatch ; le handler du maître ne le décrémente
- *  qu'après réception d'un ACK de l'esclave. Sans ce mécanisme, la JVM
- *  productrice pourrait sortir avant que le handler n'ait poussé les octets
- *  sur le réseau.
- */
 public class ChannelMaster<T> implements go.Channel<T> {
 
     private static final long serialVersionUID = 1L;
@@ -88,11 +74,11 @@ public class ChannelMaster<T> implements go.Channel<T> {
                 Envelope<T> env = innerShm.in();
                 out.writeObject(env.value);
                 out.flush();
-                byte ack = in.readByte();          // bloque sur l'ACK esclave
+                byte ack = in.readByte(); // bloque sur l'ACK esclave
                 if (ack != ACK) {
                     System.err.println("ChannelMaster[" + name + "] ACK IN inattendu: " + ack);
                 }
-                env.delivered.countDown();         // libère enfin le producteur
+                env.delivered.countDown(); // libère enfin le producteur
             } else if (op == OP_OUT) {
                 T v = (T) in.readObject();
                 // out() local bloquera jusqu'à ce qu'un consommateur ait pris ET acké.
@@ -107,8 +93,6 @@ public class ChannelMaster<T> implements go.Channel<T> {
         }
     }
 
-    /** Fermeture du maître (utilisée par la Factory si on perd la course
-     *  au registre et qu'on doit basculer en esclave). */
     void close() {
         try { serverSocket.close(); } catch (IOException ignored) {}
     }
